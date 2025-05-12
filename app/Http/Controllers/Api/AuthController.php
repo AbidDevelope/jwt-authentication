@@ -167,7 +167,7 @@ class AuthController extends Controller
                 'status' => true,
                 'message' => 'Succcessfully logout'
             ]);
-        }catch(Exception $e) {
+        }catch(\Exception $e) {
             return $e->getMessage();
         }
     }
