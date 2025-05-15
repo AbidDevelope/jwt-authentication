@@ -14,10 +14,12 @@ Route::controller(AuthController::class)->group(function(){
     Route::post('register', 'register');
 });
 
-Route::middleware('auth:api')->group(function(){
-});
-Route::controller(AuthController::class)->group(function(){
-    Route::post('logout', 'logout');
-    Route::get('profile', 'profile');
+Route::middleware(['auth:api'])->group(function(){
+    Route::controller(AuthController::class)->group(function(){
+        Route::post('logout', 'logout');
+        Route::get('profile', 'profile');
+        Route::patch('update', 'update');
+        Route::get('me', 'me');
+    });
 });
 
