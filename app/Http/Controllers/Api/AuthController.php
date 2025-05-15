@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use Tymon\JWTAuth\Exceptions\JWTException;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -143,7 +144,7 @@ class AuthController extends Controller
                 'status' => false,
                 'user' => 'user not found'
             ]);
-        }
+        } 
 
         return response()->json([
             'status' => true,
@@ -151,24 +152,94 @@ class AuthController extends Controller
         ]);
     }
 
-    public function logout(Request $request)
+    public function me()
     {
-        
-        try {
-            $token = JWTAuth::invalidate(JWTAuth::parseToken());
-            if(!$token)
+        $user = Auth::guard('api')->user();
+        if(!$user)
+        {
+            return response()->json(['status' => false, 'user' => 'user not found'], 404);
+        }
+        return response()->json(['status' => true, 'user' => $user], 201);
+    }    
+
+    public function update(Request $request, User $user)
+    {
+       try{
+            $user = Auth::guard('api')->user();  
+            if(!$user)
+            {
+                return response()->json(['status' => false, 'message' => 'auhtenticated user not found'], 404);
+            }
+
+     
+            $validator = Validator::make($request->all(), [
+                'name' => 'required|string|max:255',
+            ]);
+
+            if($validator->fails())
             {
                 return response()->json([
-                    'error' => 'token error invaladate'
-                ]);
+                    'status' => false,
+                    'error' => $validator->errors()
+                ], 422);
             }
+           
+            $user->name = $request->input('name');
+            $user->save();
 
             return response()->json([
                 'status' => true,
-                'message' => 'Succcessfully logout'
-            ]);
-        }catch(\Exception $e) {
+                'message' => 'User Updated Successfully',
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'updated' => $user->updated_at
+                ]
+            ], 200);
+
+       }
+       catch(\Exception $e)
+       {
+        return response()->json([
+            'status' => false,
+            'message' => 'An error occurred while updating the user.'
+        ], 500);
+       }
+       catch(\JWTExecption $e)
+       {
+        return response()->json([
+            'status' => false,
+            'message' => 'invalid or expired token'
+        ], 401);
+       }
+    }
+
+    public function logout(Request $request)
+    {
+        try {
+            $user = Auth::guard('api')->user();
+            if(!$user)
+            {
+                return response()->json(['status'=> false, 'message' => 'No authentcated user found']);
+            }
+
+            JWTAuth::parseToken()->invalidate(true);
+            Auth::guard('api')->logout();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Succcessfully logout',
+                'user' => $user
+            ], 200);
+        }catch(\Exception $e) 
+        {
             return $e->getMessage();
+        }catch(\JWTException $e)
+        {
+          return response()->json([
+            'status' => false,
+            'message' => 'Failed to invalidate token.'
+          ], 400);
         }
     }
 }
