@@ -15,11 +15,6 @@ use Carbon\Carbon;
 
 class AuthController extends Controller
 {
-    // public function __constuct()
-    // {
-    //     $this->middleware('auth:api', ['except' => ['login', 'register']]);
-    // } 
-
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -74,12 +69,12 @@ class AuthController extends Controller
         return response()->json([
             'status' => false,
             'message' => 'user not found! Please first register'
-        ]);
+        ], 404);
        }
 
        $otp = rand(1000, 9999);
        
-       $otpSend = $users->update([
+       $otpSend = $users->update([ 
         'otp' => $otp,
         'expire_at' => Carbon::now()->addMinutes(5),
        ]);
@@ -88,51 +83,69 @@ class AuthController extends Controller
        {
         return response()->json([
             'status' => true,
-            'message' => "OTP sent successfully to number. $request->mobile"
-        ]);
+            'message' => "OTP has been sent to. $request->mobile"
+        ], 200);
        }
     }
 
     public function verifyOtp(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'mobile' => 'required|digits:10',
-            'otp' => 'required|digits:4'
-        ]); 
-
-        if($validator->fails())
+        try
         {
-            return response()->json($validator->errors(), 422);
-        }
+            $validator = Validator::make($request->all(), [
+                'mobile' => 'required|digits:10',
+                'otp' => 'required|digits:4'
+            ]); 
 
-        $user = User::where('mobile', $request->mobile)->where('otp', $request->otp)
+            if($validator->fails())
+            {
+                return response()->json($validator->errors(), 422);
+            }      
+            
+            $user = User::where('mobile', $request->mobile)->where('otp', $request->otp)
                       ->where('expire_at', '>=', now())->first();
-        if(!$user)
-        {
-            return response()->json(['error' => 'Invalid or expire otp'], 401);
-        }   
+            if(!$user)
+            {
+                return response()->json(['error' => 'Invalid or expire otp'], 401);
+            }   
 
-        $token = Auth::guard('api')->login($user); 
-        if(!$token)
-        {
-            return response()->json(['token' => 'token generation failed'], 500);
+            $token = JWTAuth::fromUser($user); 
+            if(!$token)
+            {
+                return response()->json(['token' => 'An error occured'], 500);
+            }
+
+            if($token)
+            {
+                $user->update(['otp' => null, 'expire_at' => null]);
+            } 
+
+            return response()->json([
+                'status' => true,
+                'message' => 'You Have Successfully login',
+                'user'=> [
+                    'id' => $user->id,
+                    'name' =>   $user->name,
+                    'mobile' => $user->mobile
+                ],
+                'token' => $token,
+            ], 200); 
         }
-
-        if($token)
+        catch(\JWTException $e)
         {
-            $user->update(['otp' => null]);
-        } 
-
-        return response()->json([
-            'status' => true,
-            'message' => 'You Have Successfully login',
-            'users'=> [
-                'id' => $user->id,
-               'name' => $user->name,
-               'mobile' => $user->mobile
-            ],
-            'token' => $token,
-        ]);              
+         return response()->json([
+            'status' => false,
+            'message' => 'Token generation failed'
+         ], 500);
+        }
+        catch(\Exception $e)
+        {
+            return response()->json([
+                'status' => false,
+                'message' => 'An error occured during otp verification.'
+            ], 500);
+        }
+                 
     }       
 
     public function profile()
@@ -149,7 +162,7 @@ class AuthController extends Controller
         return response()->json([
             'status' => true,
             'user' => $user
-        ]);
+        ], 200);
     }
 
     public function me()
@@ -159,7 +172,7 @@ class AuthController extends Controller
         {
             return response()->json(['status' => false, 'user' => 'user not found'], 404);
         }
-        return response()->json(['status' => true, 'user' => $user], 201);
+        return response()->json(['status' => true, 'user' => $user], 200);
     }    
 
     public function update(Request $request, User $user)
@@ -220,7 +233,7 @@ class AuthController extends Controller
             $user = Auth::guard('api')->user();
             if(!$user)
             {
-                return response()->json(['status'=> false, 'message' => 'No authentcated user found']);
+                return response()->json(['status'=> false, 'message' => 'No authentcated user found'], 404);
             }
 
             JWTAuth::parseToken()->invalidate(true);
